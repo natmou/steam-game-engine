@@ -30,6 +30,12 @@ def get_data():
         rates_call = requests.get(ratings_api + str(id_app))
         rates = json.loads(rates_call.text)
         app_desc = json.loads(api_call.text)
+        while(app_desc == None):
+            sleep(120)
+            api_call = requests.get(steam_details_api + str(id_app))
+            rates_call = requests.get(ratings_api + str(id_app))
+            rates = json.loads(rates_call.text)
+            app_desc = json.loads(api_call.text)
         game = app_desc[app_desc.keys()[0]]
         if game['success']:
             game_info = game['data']
@@ -103,16 +109,29 @@ def clean_text():
     pickle.dump(data, open(os.path.join(app_path, 'data_processed/clean_data.p'), 'wb'))
 
 def tf_idf_calculation():
+
+    def tf_idf_dict(row):
+        word_scores = {}
+        list_word = list(set(row['cat3']))
+        for word in list_word:
+            if word in name_corr:
+                idx = np.where(name_corr == word)[0][0]
+                word_score = X[row['id_row']][idx]
+                word_scores[word] = word_score
+        return word_scores
+
     data = pickle.load(open(os.path.join(app_path, 'data_processed/clean_data.p'), 'rb'))
     vect = TfidfVectorizer(sublinear_tf=True, max_df=1.0, analyzer='word', stop_words='english')
 
     X = vect.fit_transform(data['cat3_non_tk']).toarray()
-    data['tfidf_score'] = X.tolist()
 
-    name_corr = vect.get_feature_names()
+    name_corr = np.array(vect.get_feature_names())
+
+    data['id_row'] = np.arange(data.shape[0])
+    %%time
+    data['tf_idf_dict'] = data.apply(lambda x: tf_idf_dict(x), axis=1)
 
     pickle.dump(data, open(os.path.join(app_path, 'data_processed/tf_idf_data.p'), 'wb'))
-    pickle.dump(name_corr, open(os.path.join(app_path, 'data_processed/names_tf_idf.p'), 'wb'))
 
 def game_vector():
 
@@ -127,11 +146,10 @@ def game_vector():
             if w in model:
                 vector = vector + model[w]
                 coeff += 1
-        for w in row['cat3']:
-            if (w in model) and (w in names_tfidf):
-                idx_tfidf = np.where(names_tfidf == w)[0][0]
-                tfidf_score = row['tfidf_score'][idx_tfidf]
-                c = tfidf_score*0.5
+        dict_cat3 = row['tf_idf_dict']
+        for w in dict_cat3:
+            if (w in model):
+                c = dict_cat3[w]*0.5
                 coeff+=c
                 vector = vector + model[w]*c
             
@@ -139,11 +157,13 @@ def game_vector():
         return vector.tolist()
 
     data = pickle.load(open(os.path.join(app_path, 'data_processed/tf_idf_data.p'), 'rb'))
-    names_tfidf = pickle.load(open(os.path.join(app_path, 'data_processed/names_tf_idf.p'), 'rb'))
-    names_tfidf = np.array(names_tfidf)
+    #names_tfidf = pickle.load(open(os.path.join(app_path, 'data_processed/names_tf_idf.p'), 'rb'))
+    #names_tfidf = np.array(names_tfidf)
 
-    glove2word2vec(os.path.join(app_path, 'models/glove.twitter.27B.200d.txt'),
-                            os.path.join(app_path, 'models/glove_w2v_200'))
+    if os.path.isfile(os.path.join(app_path, 'models/glove_w2v_200')) == False:
+        glove2word2vec(os.path.join(app_path, 'models/glove.twitter.27B.200d.txt'),
+                                os.path.join(app_path, 'models/glove_w2v_200'))
+
     model = KeyedVectors.load_word2vec_format(os.path.join(app_path, 'models/glove_w2v_200'))
 
     data['vec'] = data.apply(lambda x: construct_vector(x), axis=1)
