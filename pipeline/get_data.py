@@ -74,7 +74,8 @@ def get_data():
                'dev' , 'pub', 'cat',
                'genres', 'score', 'nb_rec']
 
-    df_info = pd.DataFrame.from_records(games, columns=df_cols)       
+    df_info = pd.DataFrame.from_records(games, columns=df_cols)  
+    df_info = df_info.drop_duplicates()  
     pickle.dump(df_info, open(os.path.join(app_path, 'data_processed/scrap_df.f'), 'wb'))
 
 def clean_text():
@@ -146,6 +147,7 @@ def game_vector():
     model = KeyedVectors.load_word2vec_format(os.path.join(app_path, 'models/glove_w2v_200'))
 
     data['vec'] = data.apply(lambda x: construct_vector(x), axis=1)
+    pickle.dump(data, open(os.path.join(app_path, 'data_processed/data_vectors.p'), 'wb'))
 
     write_line = data.apply(lambda x: str(x['id']) + ' ' + 
                         str(x['vec']).replace(',','')
