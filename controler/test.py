@@ -1,3 +1,3 @@
-import pandas
+import pandas as pd
 
 pd=pd.DataFrame()
